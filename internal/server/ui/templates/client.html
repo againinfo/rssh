@@ -1,0 +1,202 @@
+{{define "client.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <div class="hero__row">
+    <div>
+      <h1>Client</h1>
+      <p class="muted">Run single-shot commands over the reverse_ssh control channel.</p>
+    </div>
+    <div class="hero__actions">
+      <a class="btn btn--ghost" href="/ui/">Back</a>
+      {{if eq .Client.Status "connected"}}
+        <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/exec">Exec</a>
+        <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/files">Files</a>
+        <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/shell">Shell</a>
+        <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/forwards">Forwards</a>
+        <button class="btn btn--danger" id="kill-btn" type="button" data-id="{{.Client.ID}}">Kill</button>
+      {{else}}
+        <span class="hint">Client is offline</span>
+      {{end}}
+    </div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card">
+    <h2 class="card__title">Details</h2>
+    <dl class="kv">
+      <div><dt>ID</dt><dd class="mono">{{.Client.ID}}</dd></div>
+      <div><dt>Fingerprint</dt><dd class="mono" id="client-fp">{{.Client.Fingerprint}}</dd></div>
+      <div><dt>Status</dt><dd class="mono">{{.Client.Status}}</dd></div>
+      <div><dt>Host</dt><dd>{{.Client.Hostname}}</dd></div>
+      <div><dt>Remote</dt><dd class="mono">{{.Client.RemoteAddr}}</dd></div>
+      <div><dt>OS</dt><dd class="mono">{{.Client.OS}}</dd></div>
+      <div><dt>Last seen</dt><dd class="mono">{{.Client.LastSeen}}</dd></div>
+      <div>
+        <dt>Owners</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:280px" id="owners" value="{{.Client.Owners}}" placeholder="public" />
+          {{if eq .Client.Status "connected"}}
+            <button class="btn btn--ghost btn--sm" type="button" id="owners-save" data-id="{{.Client.ID}}">Save</button>
+          {{else}}
+            <button class="btn btn--ghost btn--sm" type="button" disabled title="offline">Save</button>
+          {{end}}
+        </dd>
+      </div>
+      <div>
+        <dt>Group</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input" style="max-width:280px" id="group" value="{{.Client.Group}}" placeholder="e.g. prod / dev / db" />
+          <button class="btn btn--ghost btn--sm" type="button" id="group-save" data-id="{{.Client.ID}}">Save</button>
+        </dd>
+      </div>
+      <div>
+        <dt>Note</dt>
+        <dd class="row" style="justify-content:flex-end; width:100%">
+          <textarea class="textarea" id="note" rows="3" placeholder="备注">{{.Client.Note}}</textarea>
+        </dd>
+      </div>
+      <div>
+        <dt></dt>
+        <dd class="row" style="justify-content:flex-end">
+          <button class="btn btn--ghost btn--sm" type="button" id="note-save" data-id="{{.Client.ID}}">Save note</button>
+        </dd>
+      </div>
+      <div><dt>Key</dt><dd class="mono">{{.Client.KeyLabel}}</dd></div>
+      <div><dt>Version</dt><dd class="mono">{{.Client.Version}}</dd></div>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Connectivity</h2>
+    <dl class="kv">
+      <div>
+        <dt>Server timeout (s)</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:160px" id="comm-server-timeout" value="{{.Client.ServerTimeoutSeconds}}" placeholder="0" />
+        </dd>
+      </div>
+      <div>
+        <dt>Client heartbeat (s)</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:160px" id="comm-client-heartbeat" value="{{.Client.ClientHeartbeatSec}}" placeholder="0" />
+        </dd>
+      </div>
+      <div>
+        <dt>Sleep window</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:200px" id="comm-sleep-window" value="{{.Client.SleepWindow}}" placeholder="23:00-06:00" />
+        </dd>
+      </div>
+      <div>
+        <dt>Sleep check (s)</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:160px" id="comm-sleep-check" value="{{.Client.SleepCheckSec}}" placeholder="30" />
+        </dd>
+      </div>
+      <div>
+        <dt>Sleep until</dt>
+        <dd class="row" style="justify-content:flex-end">
+          <input class="input mono" style="max-width:280px" id="comm-sleep-until" value="{{.Client.SleepUntil}}" placeholder="RFC3339" readonly />
+        </dd>
+      </div>
+      <div>
+        <dt></dt>
+        <dd class="row" style="justify-content:flex-end">
+          <button class="btn btn--ghost btn--sm" type="button" id="comm-save" data-id="{{.Client.ID}}">Save</button>
+        </dd>
+      </div>
+    </dl>
+    <div class="hint" id="comm-hint"></div>
+
+    <div class="row" style="margin-top:10px">
+      <button class="btn btn--ghost btn--sm" type="button" id="sleep-open" data-id="{{.Client.ID}}">Sleep…</button>
+      <button class="btn btn--ghost btn--sm" type="button" id="sleep-clear" data-id="{{.Client.ID}}">Clear sleep</button>
+      <span class="hint" id="sleep-hint"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Networking</h2>
+    <div class="empty">
+      <div class="empty__title">Forwards & SOCKS</div>
+      <div class="empty__hint">Summary for this client (use the dedicated page to manage).</div>
+      <dl class="kv" style="margin-top:10px">
+        <div><dt>Remote forwards</dt><dd class="mono" id="net-remote-count">…</dd></div>
+        <div><dt>Local tunnels</dt><dd class="mono" id="net-tunnel-count">…</dd></div>
+        <div><dt>SOCKS proxies</dt><dd class="mono" id="net-socks-count">…</dd></div>
+      </dl>
+
+      <div class="stack" style="margin-top:14px">
+        <div class="label">Quick tunnel</div>
+        <div class="row">
+          <input class="input mono" id="net-tun-port" placeholder="listen port (e.g. 15432)" style="max-width:220px" />
+          <input class="input mono" id="net-tun-target" placeholder="target host:port (e.g. 10.0.0.10:5432)" />
+          <button class="btn btn--ghost btn--sm" type="button" id="net-tun-create">Create</button>
+        </div>
+        <div class="hint" id="net-tun-hint"></div>
+      </div>
+
+      <div class="stack" style="margin-top:14px">
+        <div class="label">Quick SOCKS</div>
+        <div class="row">
+          <input class="input mono" id="net-socks-bind" placeholder="bind (default 127.0.0.1)" style="max-width:220px" />
+          <input class="input mono" id="net-socks-port" placeholder="port (e.g. 1081)" style="max-width:200px" />
+          <label class="hint" style="display:flex; gap:8px; align-items:center">
+            <input type="checkbox" id="net-socks-expose" />
+            0.0.0.0
+          </label>
+          <button class="btn btn--ghost btn--sm" type="button" id="net-socks-create">Create</button>
+        </div>
+        <div class="hint" id="net-socks-hint"></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <a class="btn" href="/ui/clients/{{.Client.ID}}/forwards">Open Forwards</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="modal" id="sleep-modal" style="display:none" aria-hidden="true">
+  <div class="modal__backdrop" id="sleep-backdrop"></div>
+  <div class="modal__panel">
+    <div class="row">
+      <div class="stack" style="flex:1; min-width: 240px">
+        <div class="label">Sleep</div>
+        <div class="mono" id="sleep-title"></div>
+      </div>
+      <div class="row">
+        <button class="btn btn--sm" type="button" id="sleep-save"><span class="ico ico--save" aria-hidden="true"></span>Apply</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="sleep-close"><span class="ico ico--x" aria-hidden="true"></span>Close</button>
+      </div>
+    </div>
+
+    <div class="stack" style="margin-top:12px">
+      <label class="label" for="sleep-mode">Mode</label>
+      <select class="input" id="sleep-mode">
+        <option value="now">Sleep now</option>
+        <option value="until">Sleep until</option>
+      </select>
+
+      <div id="sleep-now" class="stack">
+        <label class="label" for="sleep-minutes">Minutes</label>
+        <input class="input mono" id="sleep-minutes" value="60" />
+      </div>
+
+      <div id="sleep-until" class="stack" style="display:none">
+        <label class="label" for="sleep-date">Date</label>
+        <input class="input" type="date" id="sleep-date" />
+        <label class="label" for="sleep-time">Time</label>
+        <input class="input" type="time" id="sleep-time" value="00:00" />
+      </div>
+
+      <div class="hint" id="sleep-modal-hint"></div>
+    </div>
+  </div>
+</div>
+<script src="/ui/assets/client.js"></script>
+{{end}}

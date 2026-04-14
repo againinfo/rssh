@@ -1,0 +1,30 @@
+{{define "webhooks.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <h1>Webhooks</h1>
+  <p class="muted">Send client connect/disconnect events to HTTP endpoints.</p>
+</section>
+
+<section class="card">
+  <form id="hook-form" class="row">
+    <input class="input mono" id="hook-url" placeholder="https://example.com/hook" />
+    <label class="check"><input type="checkbox" id="hook-tls" checked /> verify TLS</label>
+    <button class="btn" type="button" id="hook-add">Add</button>
+    <button class="btn btn--ghost" type="button" id="hook-refresh">Refresh</button>
+  </form>
+  <div class="tablewrap" style="margin-top:12px">
+    <table class="table">
+      <thead>
+        <tr><th>URL</th><th>TLS</th><th></th></tr>
+      </thead>
+      <tbody id="hook-table"></tbody>
+    </table>
+  </div>
+</section>
+
+<script src="/ui/assets/webhooks.js"></script>
+{{end}}
+

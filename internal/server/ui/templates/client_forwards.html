@@ -1,0 +1,122 @@
+{{define "client_forwards.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <div class="hero__row">
+    <div>
+      <h1>Forwards</h1>
+      <p class="muted">Networking helpers for this client (forwarding, tunnels, SOCKS).</p>
+    </div>
+    <div class="hero__actions">
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}">Back</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/exec">Exec</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/files">Files</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/shell">Shell</a>
+    </div>
+  </div>
+</section>
+
+<section class="grid">
+  <div class="card">
+    <h2 class="card__title">Client</h2>
+    <dl class="kv">
+      <div><dt>ID</dt><dd class="mono" id="client-id">{{.Client.ID}}</dd></div>
+      <div><dt>Status</dt><dd class="mono">{{.Client.Status}}</dd></div>
+      <div><dt>Host</dt><dd>{{.Client.Hostname}}</dd></div>
+      <div><dt>Remote</dt><dd class="mono">{{.Client.RemoteAddr}}</dd></div>
+      <div><dt>OS</dt><dd class="mono">{{.Client.OS}}</dd></div>
+      <div><dt>Fingerprint</dt><dd class="mono" id="client-fp">{{.Client.Fingerprint}}</dd></div>
+    </dl>
+    {{if ne .Client.Status "connected"}}
+      <div class="hint">Client is offline; create actions will fail until it reconnects.</div>
+    {{end}}
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Remote Forwards</h2>
+    <div class="hint">Controls client remote tcpip-forwards (same as SSH -R style).</div>
+    <div class="stack" style="margin-top:12px">
+      <div class="row">
+        <input class="input mono" id="rf-addr" placeholder=":9000 or 127.0.0.1:9000" />
+        <button class="btn" type="button" id="rf-on">On</button>
+        <button class="btn btn--ghost" type="button" id="rf-off">Off</button>
+        <button class="btn btn--ghost" type="button" id="rf-list">List</button>
+      </div>
+      <pre class="pre" id="rf-out"></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Local Tunnel</h2>
+    <div class="hint">Creates a server-local listener (127.0.0.1:PORT) and forwards traffic through this client to a target host:port.</div>
+    <div class="stack" style="margin-top:12px">
+      <div class="row">
+        <div class="stack" style="flex:1">
+          <label class="label" for="tun-port">Listen port</label>
+          <input class="input mono" id="tun-port" placeholder="e.g. 15432" />
+        </div>
+        <div class="stack" style="flex:2">
+          <label class="label" for="tun-target">Target (host:port)</label>
+          <input class="input mono" id="tun-target" placeholder="10.0.0.10:5432" />
+        </div>
+        <div class="stack" style="width:160px; align-self:flex-end">
+          <button class="btn" type="button" id="tun-create">Create</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn--ghost" type="button" id="tun-refresh">Refresh</button>
+        <span class="hint" id="tun-hint"></span>
+      </div>
+      <div class="tablewrap">
+        <table class="table">
+          <thead>
+            <tr><th>ID</th><th>Listen</th><th>Target</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="tun-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">SOCKS5</h2>
+    <div class="hint">Starts a SOCKS5 server bound to the selected address/port. Only CONNECT is allowed.</div>
+    <div class="stack" style="margin-top:12px">
+      <div class="row">
+        <div class="stack" style="flex:1">
+          <label class="label" for="socks-bind">Bind address</label>
+          <input class="input mono" id="socks-bind" placeholder="127.0.0.1 (default) or 0.0.0.0" />
+          <label class="hint" style="display:flex; gap:8px; align-items:center; margin-top:6px">
+            <input type="checkbox" id="socks-expose" />
+            Expose on all interfaces (sets 0.0.0.0)
+          </label>
+        </div>
+        <div class="stack" style="flex:1">
+          <label class="label" for="socks-port">Listen port</label>
+          <input class="input mono" id="socks-port" placeholder="e.g. 1081" />
+        </div>
+        <div class="stack" style="width:160px; align-self:flex-end">
+          <button class="btn" type="button" id="socks-create">Create</button>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn btn--ghost" type="button" id="socks-refresh">Refresh</button>
+        <span class="hint" id="socks-hint"></span>
+      </div>
+      <div class="tablewrap">
+        <table class="table">
+          <thead>
+            <tr><th>ID</th><th>Listen</th><th>Created</th><th></th></tr>
+          </thead>
+          <tbody id="socks-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script src="/ui/assets/client_forwards.js"></script>
+{{end}}
+

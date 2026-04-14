@@ -1,0 +1,128 @@
+{{define "index.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <div class="hero__row">
+    <div>
+      <h1>Clients</h1>
+      <p class="muted">Known controllable hosts (online + offline) visible to the server.</p>
+    </div>
+    <div class="hero__actions">
+      <span class="meta__pill">Total: {{.Total}}</span>
+      <button class="btn btn--ghost" type="button" id="expand-all">Expand</button>
+      <button class="btn btn--ghost" type="button" id="collapse-all">Collapse</button>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <form class="search" method="get" action="/ui/">
+    <input class="input" type="text" name="q" value="{{.Query}}" placeholder="Search: id, hostname, ip, key, group, note…" />
+    <button class="btn" type="submit">Search</button>
+    <a class="btn btn--ghost" href="/ui/">Clear</a>
+    <span class="spacer"></span>
+    <button class="btn btn--ghost" type="button" id="bulk-group">Set group…</button>
+    <button class="btn btn--ghost" type="button" id="bulk-note">Set note…</button>
+    <a class="btn btn--ghost" href="/ui/">Refresh</a>
+  </form>
+
+  {{if eq (len .Groups) 0}}
+    <div class="empty">
+      <div class="empty__title">No clients connected</div>
+      <div class="empty__hint">When a client connects it will appear here.</div>
+    </div>
+  {{else}}
+    {{range .Groups}}
+      <details class="group" data-group="{{.Name}}" {{if .Open}}open{{end}}>
+        <summary class="group__summary">
+          <span class="group__title">{{.Name}}</span>
+          <span class="group__count">{{len .Rows}}</span>
+        </summary>
+        <div class="tablewrap" style="margin-top:10px">
+          <table class="table clients-table" data-group-table="{{.Name}}">
+            <thead>
+              <tr>
+                <th style="width:42px"><input type="checkbox" class="sel-all" aria-label="Select all in group" /></th>
+                <th data-col="status" style="width:90px">Status</th>
+                <th data-col="id">ID</th>
+                <th data-col="host">Host</th>
+                <th data-col="remote">Remote</th>
+                <th data-col="os">OS</th>
+                <th data-col="owners">Owners</th>
+                <th data-col="key">Key</th>
+                <th data-col="version">Version</th>
+                <th data-col="note">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{range .Rows}}
+                <tr data-id="{{.ID}}" data-status="{{.Status}}" data-fp="{{.Fingerprint}}" data-group="{{.Group}}" data-note="{{.Note}}">
+                  <td><input type="checkbox" class="sel" aria-label="Select client" /></td>
+                  <td>
+                    {{if eq .Status "connected"}}
+                      <span class="dot dot--online" title="online"></span>
+                    {{else}}
+                      <span class="dot dot--offline" title="offline"></span>
+                    {{end}}
+                    <span class="mono">{{.Status}}</span>
+                  </td>
+                  <td><a class="mono" href="/ui/clients/{{.ID}}">{{.ID}}</a></td>
+                  <td>{{.Hostname}}</td>
+                  <td class="mono">{{.RemoteAddr}}</td>
+                  <td class="mono">{{.OS}}</td>
+                  <td>{{.Owners}}</td>
+                  <td class="mono">{{.KeyLabel}}</td>
+                  <td class="mono">{{.Version}}</td>
+                  <td class="note-cell" title="{{.Note}}">
+                    <button class="btn btn--ghost btn--sm edit-meta" type="button">Edit</button>
+                    {{if ne .Status "connected"}}
+                      <button class="btn btn--ghost btn--sm delete-client" type="button" title="Delete offline client">
+                        <span class="ico ico--trash" aria-hidden="true"></span>
+                      </button>
+                    {{end}}
+                    <span class="note-text">{{.Note}}</span>
+                  </td>
+                </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    {{end}}
+  {{end}}
+</section>
+
+<div class="modal" id="client-meta-modal" style="display:none" aria-hidden="true">
+  <div class="modal__backdrop" id="client-meta-backdrop"></div>
+  <div class="modal__panel">
+    <div class="row">
+      <div class="stack" style="flex:1; min-width: 240px">
+        <div class="label">Client Meta</div>
+        <div class="mono" id="client-meta-title"></div>
+      </div>
+      <div class="row">
+        <button class="btn btn--sm" type="button" id="client-meta-save"><span class="ico ico--save" aria-hidden="true"></span>Save</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="client-meta-close"><span class="ico ico--x" aria-hidden="true"></span>Close</button>
+      </div>
+    </div>
+    <div class="stack" style="margin-top:12px">
+      <div class="row" id="client-meta-bulk-flags" style="display:none">
+        <label class="check"><input type="checkbox" id="client-meta-apply-group" checked />Apply group</label>
+        <label class="check"><input type="checkbox" id="client-meta-apply-note" checked />Apply note</label>
+      </div>
+      <label class="label" for="client-meta-group">Group</label>
+      <input class="input" id="client-meta-group" placeholder="e.g. prod / dev / db" />
+      <label class="label" for="client-meta-note">Note</label>
+      <textarea class="textarea" id="client-meta-note" rows="6" placeholder="备注"></textarea>
+      <div class="hint" id="client-meta-hint"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/assets/clients.js"></script>
+{{if .Enable}}
+<script src="/ui/assets/app.js"></script>
+{{end}}
+{{end}}

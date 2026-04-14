@@ -1,0 +1,97 @@
+{{define "files.html"}}
+{{template "base" .}}
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <div class="hero__row">
+    <div>
+      <h1>Files</h1>
+      <p class="muted">Browse via SFTP subsystem on the selected client.</p>
+    </div>
+    <div class="hero__actions">
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}">Back</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/exec">Exec</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/shell">Shell</a>
+      <a class="btn btn--ghost" href="/ui/clients/{{.Client.ID}}/forwards">Forwards</a>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <div id="client-meta" data-client-id="{{.Client.ID}}" style="display:none"></div>
+  <div class="row">
+    <input class="input mono" id="path" value="/" />
+    <button class="btn" type="button" id="go"><span class="ico ico--folder" aria-hidden="true"></span>Go</button>
+    <button class="btn btn--ghost" type="button" id="up"><span class="ico ico--up" aria-hidden="true"></span>Up</button>
+    <input class="input" id="filter" placeholder="Filter in current folder…" style="max-width:260px" />
+    <span class="spacer"></span>
+    <label class="btn btn--ghost">
+      <span class="ico ico--upload" aria-hidden="true"></span>
+      Upload<input id="upload" type="file" style="display:none" multiple />
+    </label>
+    <button class="btn btn--ghost" type="button" id="mkdir"><span class="ico ico--folderplus" aria-hidden="true"></span>Mkdir</button>
+    <button class="btn btn--ghost" type="button" id="refresh"><span class="ico ico--refresh" aria-hidden="true"></span>Refresh</button>
+  </div>
+  <div id="breadcrumbs" class="mono hint" style="margin-top:10px"></div>
+  <div class="files__grid" style="margin-top:12px">
+    <div class="files__tree">
+      <div class="label" style="margin-bottom:8px">Tree</div>
+      <div id="tree" class="mono"></div>
+    </div>
+    <div class="files__list">
+      <div class="tablewrap">
+        <table class="table">
+          <thead>
+            <tr><th>Name</th><th>Size</th><th>Mode</th><th>Owner</th><th>Modified</th><th></th></tr>
+          </thead>
+          <tbody id="files"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="hint" id="fs-status" style="margin-top:10px"></div>
+  <div class="progress" id="upload-progress" style="display:none; margin-top:10px" aria-hidden="true">
+    <div class="progress__bar" id="upload-progress-bar" style="width:0%"></div>
+  </div>
+</section>
+
+<div class="modal" id="editor-modal" style="display:none" aria-hidden="true">
+  <div class="modal__backdrop" id="modal-backdrop"></div>
+  <div class="modal__panel">
+    <div class="tabs" id="edit-tabs"></div>
+    <div class="row">
+      <div class="stack" style="flex:1; min-width: 240px">
+        <div class="label">Viewer / Editor</div>
+        <div class="mono" id="edit-path"></div>
+      </div>
+      <div class="row">
+        <button class="btn btn--ghost btn--sm" type="button" id="edit-highlight">Highlight</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="edit-prev">Prev</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="edit-next">Next</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="edit-reload"><span class="ico ico--refresh" aria-hidden="true"></span>Reload</button>
+        <button class="btn btn--sm" type="button" id="edit-save"><span class="ico ico--save" aria-hidden="true"></span>Save</button>
+        <button class="btn btn--ghost btn--sm" type="button" id="edit-close"><span class="ico ico--x" aria-hidden="true"></span>Close</button>
+      </div>
+    </div>
+    <div id="edit-view" style="margin-top:10px">
+      <img id="edit-image" alt="" style="display:none; max-width:100%; max-height:60vh; border:1px solid var(--border); border-radius:14px" />
+      <pre class="pre mono" id="edit-pre" style="display:none; padding:12px; border:1px solid var(--border); border-radius:14px; background:var(--panel2); max-height:60vh; overflow:auto"></pre>
+      <textarea class="textarea mono" id="edit-area" rows="22" spellcheck="false" placeholder="Loading…"></textarea>
+    </div>
+    <div class="hint" id="edit-hint"></div>
+  </div>
+</div>
+
+<div class="dropzone" id="dropzone" style="display:none" aria-hidden="true">
+  <div class="dropzone__panel">
+    <div class="dropzone__title">Drop files to upload</div>
+    <div class="dropzone__hint">Uploads to current folder</div>
+    <div class="progress" id="drop-progress" style="display:none; margin-top:12px" aria-hidden="true">
+      <div class="progress__bar" id="drop-progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/assets/files.js"></script>
+{{end}}
