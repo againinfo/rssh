@@ -33,11 +33,17 @@ type Download struct {
 }
 
 func CreateDownload(file Download) error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
 	// Create the Download record in the database
 	return db.Create(&file).Error
 }
 
 func GetDownload(urlPath string) (Download, error) {
+	if db == nil {
+		return Download{}, fmt.Errorf("database not initialized")
+	}
 	var download Download
 	if err := db.Where("url_path = ?", urlPath).First(&download).Error; err != nil {
 		return download, err
@@ -51,6 +57,9 @@ func GetDownload(urlPath string) (Download, error) {
 }
 
 func ListDownloads(filter string) (matchingFiles map[string]Download, err error) {
+	if db == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
 	_, err = filepath.Match(filter, "")
 	if err != nil {
 		return nil, fmt.Errorf("filter is not well formed")
@@ -89,6 +98,9 @@ func ListDownloads(filter string) (matchingFiles map[string]Download, err error)
 }
 
 func DeleteDownload(key string) error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
 
 	// Fetch the Download record from the database based on the key
 	var download Download

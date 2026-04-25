@@ -16,6 +16,9 @@ type Webhook struct {
 }
 
 func CreateWebhook(newUrl string, checktls bool) (string, error) {
+	if db == nil {
+		return "", errors.New("database not initialized")
+	}
 	u, err := url.Parse(newUrl)
 	if err != nil {
 		return "", err
@@ -49,6 +52,9 @@ func CreateWebhook(newUrl string, checktls bool) (string, error) {
 }
 
 func GetAllWebhooks() ([]Webhook, error) {
+	if db == nil {
+		return nil, errors.New("database not initialized")
+	}
 	var webhooks []Webhook
 	if err := db.Find(&webhooks).Error; err != nil {
 		return nil, err
@@ -57,5 +63,8 @@ func GetAllWebhooks() ([]Webhook, error) {
 }
 
 func DeleteWebhook(url string) error {
+	if db == nil {
+		return errors.New("database not initialized")
+	}
 	return db.Where("url = ?", url).Delete(&Webhook{}).Error
 }

@@ -20,7 +20,7 @@ endif
 
 BUILD_FLAGS := -trimpath
 
-LDFLAGS += -X 'rssh/internal.Version=$(shell git describe --tags)'
+LDFLAGS += -X 'rssh/internal.Version=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev)'
 
 LDFLAGS_RELEASE = $(LDFLAGS) -s -w
 
@@ -62,6 +62,10 @@ server_windows:
 server_windows_arm64:
 	mkdir -p bin
 	GOOS=windows GOARCH=arm64 go build $(BUILD_FLAGS) -ldflags="$(LDFLAGS_RELEASE)" -o bin/server_windows_arm64.exe ./cmd/server
+
+gui:
+	mkdir -p bin
+	CGO_ENABLED=1 go build $(BUILD_FLAGS) -ldflags="$(LDFLAGS_RELEASE)" -o bin/rssh-gui ./cmd/gui
 
 .generate_keys:
 	mkdir -p bin

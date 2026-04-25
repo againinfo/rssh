@@ -14,14 +14,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+	"golang.org/x/crypto/ssh"
 	"rssh/internal"
 	"rssh/internal/server/data"
 	"rssh/internal/server/handlers"
 	"rssh/internal/server/observers"
 	"rssh/internal/server/users"
 	"rssh/pkg/logger"
-	"github.com/fatih/color"
-	"golang.org/x/crypto/ssh"
 )
 
 type Options struct {
@@ -256,7 +256,7 @@ func isDirEmpty(name string) bool {
 	return false
 }
 
-func StartSSHServer(sshListener net.Listener, privateKey ssh.Signer, insecure, openproxy bool, dataDir string, timeout int) {
+func StartSSHServer(sshListener net.Listener, privateKey ssh.Signer, insecure, openproxy bool, dataDir string, timeout int) error {
 	//Taken from the server example, authorized keys are required for controllers
 	adminAuthorizedKeysPath := filepath.Join(dataDir, "authorized_keys")
 	authorizedControlleeKeysPath := filepath.Join(dataDir, "authorized_controllee_keys")
@@ -380,6 +380,9 @@ func StartSSHServer(sshListener net.Listener, privateKey ssh.Signer, insecure, o
 	for {
 		conn, err := sshListener.Accept()
 		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
 			log.Printf("Failed to accept incoming connection (%s)", err)
 			continue
 		}

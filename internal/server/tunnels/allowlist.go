@@ -119,3 +119,12 @@ func AllowlistCount() int {
 	defer allowMu.RUnlock()
 	return len(allowCIDRs)
 }
+
+func AllowlistCIDRs() []*net.IPNet {
+	allowMu.RLock()
+	defer allowMu.RUnlock()
+
+	out := make([]*net.IPNet, len(allowCIDRs))
+	copy(out, allowCIDRs)
+	return out
+}
