@@ -105,7 +105,8 @@ type terminalEmu struct {
 	cols     int
 	maxLines int
 
-	style termStyle
+	style     termStyle
+	decLineG0 bool
 
 	// Buffer lines, plus current editable line.
 	lines [][]widget.TextGridCell
@@ -113,8 +114,9 @@ type terminalEmu struct {
 	row   int
 	col   int
 
-	escBuf bytes.Buffer
-	inEsc  bool
+	escBuf  bytes.Buffer
+	inEsc   bool
+	utf8Buf []byte
 }
 
 func newTerminalEmu(cols, maxLines int) *terminalEmu {
@@ -177,6 +179,9 @@ func (e *terminalEmu) newline() {
 }
 
 func (e *terminalEmu) writeRune(r rune) {
+	if e.decLineG0 {
+		r = decSpecialGraphicsRune(r)
+	}
 	e.ensureCursor()
 	if r == '\n' {
 		e.newline()
@@ -216,6 +221,63 @@ func (e *terminalEmu) writeRune(r rune) {
 	if e.col >= e.cols {
 		// hard wrap
 		e.newline()
+	}
+}
+
+func decSpecialGraphicsRune(r rune) rune {
+	switch r {
+	case '`':
+		return '◆'
+	case 'a':
+		return '▒'
+	case 'f':
+		return '°'
+	case 'g':
+		return '±'
+	case 'j':
+		return '┘'
+	case 'k':
+		return '┐'
+	case 'l':
+		return '┌'
+	case 'm':
+		return '└'
+	case 'n':
+		return '┼'
+	case 'o':
+		return '⎺'
+	case 'p':
+		return '⎻'
+	case 'q':
+		return '─'
+	case 'r':
+		return '⎼'
+	case 's':
+		return '⎽'
+	case 't':
+		return '├'
+	case 'u':
+		return '┤'
+	case 'v':
+		return '┴'
+	case 'w':
+		return '┬'
+	case 'x':
+		return '│'
+	case 'y':
+		return '≤'
+	case 'z':
+		return '≥'
+	case '{':
+		return 'π'
+	case '|':
+		return '≠'
+	case '}':
+		return '£'
+	case '~':
+		return '·'
+	default:
+		return r
 	}
 }
 
@@ -364,6 +426,13 @@ func (e *terminalEmu) handleCSI(seq string) {
 func (e *terminalEmu) writeBytes(b []byte) {
 	// sanitize and keep BEL/ESC/C1 CSI
 	b = bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
+	if len(e.utf8Buf) > 0 {
+		prefixed := make([]byte, 0, len(e.utf8Buf)+len(b))
+		prefixed = append(prefixed, e.utf8Buf...)
+		prefixed = append(prefixed, b...)
+		b = prefixed
+		e.utf8Buf = nil
+	}
 
 	for len(b) > 0 {
 		if e.inEsc {
@@ -390,6 +459,19 @@ func (e *terminalEmu) writeBytes(b []byte) {
 			} else if strings.HasPrefix(seq, "P") || strings.HasPrefix(seq, "^") || strings.HasPrefix(seq, "_") {
 				// DCS/PM/APC: terminate by ST
 				if strings.HasSuffix(seq, "\x1b\\") {
+					e.inEsc = false
+					e.escBuf.Reset()
+				}
+			} else if strings.HasPrefix(seq, "(") || strings.HasPrefix(seq, ")") || strings.HasPrefix(seq, "*") || strings.HasPrefix(seq, "+") {
+				if len(seq) >= 2 {
+					if seq[0] == '(' {
+						switch seq[1] {
+						case '0':
+							e.decLineG0 = true
+						case 'B', 'A', 'U':
+							e.decLineG0 = false
+						}
+					}
 					e.inEsc = false
 					e.escBuf.Reset()
 				}
@@ -420,6 +502,10 @@ func (e *terminalEmu) writeBytes(b []byte) {
 
 		r, size := utf8.DecodeRune(b)
 		if r == utf8.RuneError && size == 1 {
+			if !utf8.FullRune(b) {
+				e.utf8Buf = append(e.utf8Buf[:0], b...)
+				return
+			}
 			// drop invalid byte
 			b = b[1:]
 			continue
@@ -626,6 +712,26 @@ func (t *terminalWidget) render() {
 	t.grid.Rows = rows
 	t.grid.Refresh()
 	t.grid.ScrollToBottom()
+}
+
+func (t *terminalWidget) PlainText() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	var b strings.Builder
+	for _, row := range t.emu.lines {
+		line := make([]rune, len(row))
+		for i, cell := range row {
+			r := cell.Rune
+			if r == 0 {
+				r = ' '
+			}
+			line[i] = r
+		}
+		b.WriteString(strings.TrimRight(string(line), " "))
+		b.WriteByte('\n')
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // Ensure interface satisfaction

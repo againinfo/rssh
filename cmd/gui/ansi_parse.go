@@ -201,6 +201,17 @@ func (p *ansiParser) Segments() []widget.RichTextSegment {
 	return out
 }
 
+func (p *ansiParser) Text() string {
+	var b strings.Builder
+	for _, s := range p.segs {
+		b.WriteString(s.Text)
+	}
+	if p.cur.Len() > 0 {
+		b.WriteString(p.cur.String())
+	}
+	return b.String()
+}
+
 func (p *ansiParser) Append(s string) {
 	if s == "" {
 		return

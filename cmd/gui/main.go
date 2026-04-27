@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -293,7 +294,6 @@ func main() {
 	pages := []page{
 		{"Server", serverTab},
 		{"Clients", clientsTab},
-		{"Client", clientActions.clientTab},
 		{"Exec", clientActions.execTab},
 		{"Shell", clientActions.shellTab},
 		{"Files", clientActions.filesTab},
@@ -350,7 +350,6 @@ type clientActionsUI struct {
 	selectedID   *widget.Label
 	selectedMeta *widget.Label
 
-	clientTab    fyne.CanvasObject
 	execTab      fyne.CanvasObject
 	shellTab     fyne.CanvasObject
 	filesTab     fyne.CanvasObject
@@ -397,87 +396,23 @@ func newClientActionsUI(
 		return conn, nil
 	}
 
-	ownersEntry := widget.NewEntry()
-	ownersEntry.SetPlaceHolder("comma-separated owners")
-	ownersSet := widget.NewButton("Set Owners", func() {})
-	ownersSet.Disable()
-
-	metaGroup := widget.NewEntry()
-	metaNote := widget.NewMultiLineEntry()
-	metaNote.SetMinRowsVisible(6)
-	metaSave := widget.NewButton("Save Meta", func() {})
-	metaLoad := widget.NewButton("Load Meta", func() {})
-	metaSave.Disable()
-	metaLoad.Disable()
-
-	commServerTimeout := widget.NewEntry()
-	commClientHeartbeat := widget.NewEntry()
-	commSleepWindow := widget.NewEntry()
-	commSleepCheck := widget.NewEntry()
-	commSleepUntil := widget.NewEntry()
-	commLoad := widget.NewButton("Load Comm", func() {})
-	commSave := widget.NewButton("Save+Apply Comm", func() {})
-	commLoad.Disable()
-	commSave.Disable()
-
-	sleepMinutes := widget.NewEntry()
-	sleepMinutes.SetPlaceHolder("minutes")
-	sleepUntil := widget.NewEntry()
-	sleepUntil.SetPlaceHolder("RFC3339 (e.g. 2026-04-20T12:00:00Z)")
-	sleepNowBtn := widget.NewButton("Sleep Now", func() {})
-	sleepUntilBtn := widget.NewButton("Sleep Until", func() {})
-	sleepClearBtn := widget.NewButton("Clear Sleep", func() {})
-	sleepNowBtn.Disable()
-	sleepUntilBtn.Disable()
-	sleepClearBtn.Disable()
-
-	killBtn := widget.NewButton("Kill Client", func() {})
-	killBtn.Disable()
-	deleteKnownBtn := widget.NewButton("Delete Known", func() {})
-	deleteKnownBtn.Disable()
-
-	clientBody := container.NewVScroll(container.NewVBox(
-		widget.NewLabelWithStyle("Identity", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewBorder(nil, nil, nil, container.NewHBox(ownersSet, deleteKnownBtn, killBtn), ownersEntry),
-		widget.NewSeparator(),
-
-		widget.NewLabelWithStyle("Meta (Group / Note)", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewForm(
-			widget.NewFormItem("Group", metaGroup),
-			widget.NewFormItem("Note", metaNote),
-		),
-		container.NewHBox(metaLoad, metaSave, layout.NewSpacer()),
-		widget.NewSeparator(),
-
-		widget.NewLabelWithStyle("Comm Settings", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewForm(
-			widget.NewFormItem("Server Timeout (s)", commServerTimeout),
-			widget.NewFormItem("Client Heartbeat (s)", commClientHeartbeat),
-			widget.NewFormItem("Sleep Window", commSleepWindow),
-			widget.NewFormItem("Sleep Check (s)", commSleepCheck),
-			widget.NewFormItem("Sleep Until", commSleepUntil),
-		),
-		container.NewHBox(commLoad, commSave, layout.NewSpacer()),
-		widget.NewSeparator(),
-
-		widget.NewLabelWithStyle("Sleep Control", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewBorder(nil, nil, nil, sleepNowBtn, sleepMinutes),
-		container.NewBorder(nil, nil, nil, sleepUntilBtn, sleepUntil),
-		container.NewHBox(sleepClearBtn, layout.NewSpacer()),
-	))
-	clientTab := page("Client", "Ownership, metadata, and comm settings.", clientBody)
-
 	execOut := newANSITextView()
 
 	execCmd := widget.NewEntry()
 	execCmd.SetPlaceHolder("Command to exec on client (non-interactive)")
 
 	execBtn := widget.NewButton("Run", func() {})
+	execCopy := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		fyne.CurrentApp().Clipboard().SetContent(execOut.Text())
+	})
+	execClear := widget.NewButtonWithIcon("Clear", theme.DeleteIcon(), func() {
+		execOut.Clear()
+	})
 	execBtn.Disable()
 
 	execTop := container.NewVBox(
 		widget.NewLabelWithStyle("Command", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		container.NewBorder(nil, nil, nil, execBtn, execCmd),
+		container.NewBorder(nil, nil, nil, container.NewHBox(execBtn, execCopy, execClear), execCmd),
 	)
 	execBody := container.NewBorder(execTop, nil, nil, nil, execOut.Object())
 	execTab := page("Exec", "Run a one-shot command on the selected client.", execBody)
@@ -487,6 +422,9 @@ func newClientActionsUI(
 
 	term := newTerminalWidget(120)
 	clearTerm := widget.NewButton("Clear", func() { term.Clear() })
+	copyTerm := widget.NewButtonWithIcon("Copy", theme.ContentCopyIcon(), func() {
+		fyne.CurrentApp().Clipboard().SetContent(term.PlainText())
+	})
 	shellConnect := widget.NewButton("Connect", func() {})
 	shellDisconnect := widget.NewButton("Disconnect", func() {})
 	shellConnect.Disable()
@@ -494,7 +432,7 @@ func newClientActionsUI(
 
 	appendShell := func(b []byte) { term.AppendOutput(b) }
 
-	shellTop := container.NewHBox(shellConnect, shellDisconnect, clearTerm, layout.NewSpacer())
+	shellTop := container.NewHBox(shellConnect, shellDisconnect, copyTerm, clearTerm, layout.NewSpacer())
 	shellBody := container.NewBorder(shellTop, nil, nil, nil, term.Object(w))
 	shellTab := page("Shell", "Interactive shell (terminal emulator). Click inside to type.", shellBody)
 
@@ -502,7 +440,28 @@ func newClientActionsUI(
 	filesPath := widget.NewEntry()
 	filesPath.SetText("/")
 	filesRefresh := widget.NewButton("List", func() {})
+	filesUp := widget.NewButtonWithIcon("Up", theme.NavigateBackIcon(), func() {
+		cur := strings.TrimSpace(filesPath.Text)
+		if cur == "" || cur == "/" {
+			filesPath.SetText("/")
+			return
+		}
+		filesPath.SetText(path.Dir(strings.TrimRight(cur, "/")))
+		filesRefresh.OnTapped()
+	})
+	filesClearCache := widget.NewButtonWithIcon("Clear Cache", theme.DeleteIcon(), func() {
+		id := strings.TrimSpace(selectedID.Text)
+		if id == "" || id == "None" {
+			return
+		}
+		if err := data.DeleteFileCacheForFingerprint(id); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		dialog.ShowInformation("Files Cache", "Cleared", w)
+	})
 	filesRefresh.Disable()
+	filesClearCache.Disable()
 
 	var filesEntries []sftpEntry
 
@@ -529,6 +488,17 @@ func newClientActionsUI(
 					filesRefresh.OnTapped()
 				}, absPos)
 			}
+			it.onDouble = func(index int) {
+				if index < 0 || index >= len(filesEntries) {
+					return
+				}
+				e := filesEntries[index]
+				if !e.IsDir {
+					return
+				}
+				filesPath.SetText(e.Path)
+				filesRefresh.OnTapped()
+			}
 			return it
 		},
 		func(i widget.ListItemID, o fyne.CanvasObject) {
@@ -544,7 +514,7 @@ func newClientActionsUI(
 		},
 	)
 
-	filesTop := container.NewVBox(filesInfo, container.NewBorder(nil, nil, widget.NewLabel("Path"), filesRefresh, filesPath))
+	filesTop := container.NewVBox(filesInfo, container.NewBorder(nil, nil, widget.NewLabel("Path"), container.NewHBox(filesUp, filesRefresh, filesClearCache), filesPath))
 	filesBody := container.NewBorder(filesTop, nil, nil, nil, container.NewScroll(filesList))
 	filesTab := page("Files", "Browse files over SFTP (list/read).", filesBody)
 
@@ -816,7 +786,6 @@ func newClientActionsUI(
 	ui := &clientActionsUI{
 		selectedID:   selectedID,
 		selectedMeta: selectedMeta,
-		clientTab:    clientTab,
 		execTab:      execTab,
 		shellTab:     shellTab,
 		filesTab:     filesTab,
@@ -830,7 +799,6 @@ func newClientActionsUI(
 	ui.setSelected = func(sum users.ClientSummary) {
 		selectedID.SetText(sum.ID)
 		selectedMeta.SetText(sum.Hostname + " (" + sum.Status + ")")
-		ownersEntry.SetText(strings.TrimSpace(sum.Owners))
 		if globalSelected != nil {
 			globalSelected.SetText(sum.ID + "  " + sum.Hostname + "  [" + sum.Status + "]")
 		}
@@ -841,16 +809,11 @@ func newClientActionsUI(
 		execBtn.Enable()
 		shellConnect.Enable()
 		filesRefresh.Enable()
+		filesClearCache.Enable()
 		serverListenOn.Enable()
 		serverListenOff.Enable()
 		clientForwardOn.Enable()
 		clientForwardOff.Enable()
-		ownersSet.Enable()
-		metaLoad.Enable()
-		metaSave.Enable()
-		commLoad.Enable()
-		commSave.Enable()
-		deleteKnownBtn.Enable()
 		tunnelCreate.Enable()
 		socksCreate.Enable()
 
@@ -858,19 +821,11 @@ func newClientActionsUI(
 			execBtn.Disable()
 			shellConnect.Disable()
 			filesRefresh.Disable()
+			filesClearCache.Disable()
 			clientForwardOn.Disable()
 			clientForwardOff.Disable()
-			killBtn.Disable()
-			sleepNowBtn.Disable()
-			sleepUntilBtn.Disable()
-			sleepClearBtn.Disable()
 			tunnelCreate.Disable()
 			socksCreate.Disable()
-		} else {
-			killBtn.Enable()
-			sleepNowBtn.Enable()
-			sleepUntilBtn.Enable()
-			sleepClearBtn.Enable()
 		}
 	}
 
@@ -902,6 +857,12 @@ func newClientActionsUI(
 		}, func() {
 			execBtn.Enable()
 		})
+	}
+	execCmd.OnSubmitted = func(string) {
+		if execBtn.Disabled() {
+			return
+		}
+		execBtn.OnTapped()
 	}
 
 	connectShell := func(id string) {
@@ -991,6 +952,12 @@ func newClientActionsUI(
 			if err != nil {
 				return err
 			}
+			sort.SliceStable(entries, func(i, j int) bool {
+				if entries[i].IsDir != entries[j].IsDir {
+					return entries[i].IsDir
+				}
+				return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+			})
 			fyne.Do(func() {
 				filesEntries = entries
 				filesList.Refresh()
@@ -1013,11 +980,9 @@ func newClientActionsUI(
 		}
 		e := filesEntries[i]
 		if e.IsDir {
-			filesPath.SetText(e.Path)
-			filesRefresh.OnTapped()
 			return
 		}
-		content, enc, truncated, meta, err := sftpReadFileChunk(conn, e.Path, 0, 128*1024)
+		content, enc, truncated, meta, err := sftpReadFileChunkCached(id, conn, e, 0, 128*1024)
 		if err != nil {
 			dialog.ShowError(err, w)
 			return
@@ -1026,7 +991,7 @@ func newClientActionsUI(
 		if truncated {
 			title += " [truncated]"
 		}
-		dialog.ShowCustom(title, "Close", container.NewScroll(widget.NewLabel(fmt.Sprintf("%s\n\n%s", meta.Mode, content))), w)
+		showTextPreviewDialog(w, title, fmt.Sprintf("%s\n\n%s", meta.Mode, content))
 	}
 
 	serverListenOn.OnTapped = func() {
@@ -1099,217 +1064,6 @@ func newClientActionsUI(
 			dialog.ShowError(fmt.Errorf("request failed: %v %s", err, strings.TrimSpace(string(msg))), w)
 			return
 		}
-	}
-
-	ownersSet.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		if id == "" || id == "None" {
-			return
-		}
-		if err := users.SetClientOwnershipByFingerprint(id, strings.TrimSpace(ownersEntry.Text)); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		dialog.ShowInformation("Owners", "Updated", w)
-	}
-
-	deleteKnownBtn.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		if id == "" || id == "None" {
-			return
-		}
-		if err := users.DeleteKnownClient(id); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		dialog.ShowInformation("Known Client", "Deleted", w)
-	}
-
-	killBtn.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		conn, err := getConn(id)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		_, _, _ = conn.SendRequest("kill", false, nil)
-		_ = conn.Close()
-	}
-
-	metaLoad.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		m, _, err := data.GetClientMeta(sum.Fingerprint)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		metaGroup.SetText(m.Group)
-		metaNote.SetText(m.Note)
-	}
-	metaSave.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		_, err := data.UpsertClientMeta(sum.Fingerprint, metaGroup.Text, metaNote.Text)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		dialog.ShowInformation("Meta", "Saved", w)
-	}
-
-	commLoad.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		m, _, err := data.GetClientCommSettings(sum.Fingerprint)
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		commServerTimeout.SetText(strconv.Itoa(m.ServerTimeoutSeconds))
-		commClientHeartbeat.SetText(strconv.Itoa(m.ClientHeartbeatSec))
-		commSleepWindow.SetText(m.SleepWindow)
-		commSleepCheck.SetText(strconv.Itoa(m.SleepCheckSec))
-		commSleepUntil.SetText(m.SleepUntil)
-	}
-	commSave.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-
-		st, err := strconv.Atoi(strings.TrimSpace(commServerTimeout.Text))
-		if err != nil || st < 0 || st > 3600 {
-			dialog.ShowError(errors.New("server timeout out of range (0-3600)"), w)
-			return
-		}
-		hb, err := strconv.Atoi(strings.TrimSpace(commClientHeartbeat.Text))
-		if err != nil || hb < 0 || hb > 3600 {
-			dialog.ShowError(errors.New("client heartbeat out of range (0-3600)"), w)
-			return
-		}
-		sc, err := strconv.Atoi(strings.TrimSpace(commSleepCheck.Text))
-		if err != nil || sc < 0 || sc > 3600 {
-			dialog.ShowError(errors.New("sleep check out of range (0-3600)"), w)
-			return
-		}
-		win := strings.TrimSpace(commSleepWindow.Text)
-		until := strings.TrimSpace(commSleepUntil.Text)
-		if until != "" {
-			if _, err := time.Parse(time.RFC3339, until); err != nil {
-				dialog.ShowError(errors.New("sleep until must be RFC3339"), w)
-				return
-			}
-		}
-
-		_, err = data.UpsertClientCommSettings(sum.Fingerprint, data.ClientCommSettings{
-			ServerTimeoutSeconds: st,
-			ClientHeartbeatSec:   hb,
-			SleepWindow:          win,
-			SleepCheckSec:        sc,
-			SleepUntil:           until,
-		})
-		if err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-
-		if conn, ok := users.GetClientConnByFingerprint(id); ok {
-			conn.Permissions.Extensions["server-timeout"] = strconv.Itoa(st)
-			_, _, _ = conn.SendRequest("keepalive-rssh@golang.org", false, []byte(strconv.Itoa(st)))
-			_, _, _ = conn.SendRequest("client-heartbeat@rssh", false, []byte(strconv.Itoa(hb)))
-			payload := mustJSON(map[string]any{"window": win, "check": sc})
-			_, _, _ = conn.SendRequest("sleep-window@rssh", false, []byte(payload))
-			payload2 := mustJSON(map[string]any{"until": until})
-			_, _, _ = conn.SendRequest("sleep-until@rssh", false, []byte(payload2))
-		}
-
-		dialog.ShowInformation("Comm", "Saved", w)
-	}
-
-	sleepNowBtn.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		mins, err := strconv.Atoi(strings.TrimSpace(sleepMinutes.Text))
-		if err != nil || mins <= 0 || mins > 365*24*60 {
-			dialog.ShowError(errors.New("minutes out of range"), w)
-			return
-		}
-		until := time.Now().Add(time.Duration(mins) * time.Minute).Format(time.RFC3339)
-		comm, _, _ := data.GetClientCommSettings(sum.Fingerprint)
-		comm.SleepUntil = until
-		if _, err := data.UpsertClientCommSettings(sum.Fingerprint, comm); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if conn, ok := users.GetClientConnByFingerprint(id); ok {
-			_, _, _ = conn.SendRequest("sleep-until@rssh", false, []byte(mustJSON(map[string]any{"until": until})))
-			_ = conn.Close()
-		}
-		commSleepUntil.SetText(until)
-	}
-	sleepUntilBtn.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		until := strings.TrimSpace(sleepUntil.Text)
-		if until == "" {
-			return
-		}
-		if _, err := time.Parse(time.RFC3339, until); err != nil {
-			dialog.ShowError(errors.New("until must be RFC3339"), w)
-			return
-		}
-		comm, _, _ := data.GetClientCommSettings(sum.Fingerprint)
-		comm.SleepUntil = until
-		if _, err := data.UpsertClientCommSettings(sum.Fingerprint, comm); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if conn, ok := users.GetClientConnByFingerprint(id); ok {
-			_, _, _ = conn.SendRequest("sleep-until@rssh", false, []byte(mustJSON(map[string]any{"until": until})))
-			_ = conn.Close()
-		}
-		commSleepUntil.SetText(until)
-	}
-	sleepClearBtn.OnTapped = func() {
-		id := strings.TrimSpace(selectedID.Text)
-		sum, ok := users.GetClientSummary(id)
-		if !ok {
-			dialog.ShowError(errors.New("client not found"), w)
-			return
-		}
-		comm, _, _ := data.GetClientCommSettings(sum.Fingerprint)
-		comm.SleepUntil = ""
-		if _, err := data.UpsertClientCommSettings(sum.Fingerprint, comm); err != nil {
-			dialog.ShowError(err, w)
-			return
-		}
-		if conn, ok := users.GetClientConnByFingerprint(id); ok {
-			_, _, _ = conn.SendRequest("sleep-until@rssh", false, []byte(mustJSON(map[string]any{"until": ""})))
-		}
-		commSleepUntil.SetText("")
 	}
 
 	tunnelCreate.OnTapped = func() {
@@ -1432,29 +1186,79 @@ func newClientsUI(a fyne.App, w fyne.Window, actions *clientActionsUI) fyne.Canv
 	refreshBtn := widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), nil)
 
 	var rows []users.ClientSummary
+	metas := map[string]data.ClientMeta{}
+	var refresh func()
 
 	list := widget.NewList(
 		func() int { return len(rows) },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
+		func() fyne.CanvasObject {
+			it := newClientListItem()
+			it.onSecondary = func(index int, absPos fyne.Position) {
+				if index < 0 || index >= len(rows) {
+					return
+				}
+				sum := rows[index]
+				actions.setSelected(sum)
+				showClientContextMenu(w, sum, metas[sum.Fingerprint], refresh, absPos)
+			}
+			return it
+		},
 		func(i widget.ListItemID, o fyne.CanvasObject) {
 			if i < 0 || i >= len(rows) {
 				return
 			}
 			s := rows[i]
-			o.(*widget.Label).SetText(fmt.Sprintf("%s  %s  %s  %s", s.Status, s.ID, s.Hostname, s.RemoteAddr))
+			m := metas[s.Fingerprint]
+			group := strings.TrimSpace(m.Group)
+			if group == "" {
+				group = "-"
+			}
+			note := strings.TrimSpace(m.Note)
+			if note != "" {
+				note = "  " + note
+			}
+			o.(*clientListItem).set(i, fmt.Sprintf("[%s]  %s  %s  %s  %s%s", group, s.Status, s.ID, s.Hostname, s.RemoteAddr, note))
 		},
 	)
 
-	refresh := func() {
+	refresh = func() {
 		q := strings.TrimSpace(filter.Text)
 		go func() {
 			out, err := users.ListAllClients(q)
+			nextMetas := map[string]data.ClientMeta{}
+			if err == nil {
+				fps := make([]string, 0, len(out))
+				for _, s := range out {
+					fps = append(fps, s.Fingerprint)
+				}
+				if m, metaErr := data.ListClientMetas(fps); metaErr == nil {
+					nextMetas = m
+				}
+				sort.SliceStable(out, func(i, j int) bool {
+					gi := strings.ToLower(strings.TrimSpace(nextMetas[out[i].Fingerprint].Group))
+					gj := strings.ToLower(strings.TrimSpace(nextMetas[out[j].Fingerprint].Group))
+					if gi != gj {
+						if gi == "" {
+							return false
+						}
+						if gj == "" {
+							return true
+						}
+						return gi < gj
+					}
+					if out[i].Status != out[j].Status {
+						return out[i].Status == "connected"
+					}
+					return out[i].Hostname < out[j].Hostname
+				})
+			}
 			fyne.Do(func() {
 				if err != nil {
 					dialog.ShowError(err, w)
 					return
 				}
 				rows = out
+				metas = nextMetas
 				list.Refresh()
 			})
 		}()
@@ -1480,7 +1284,159 @@ func newClientsUI(a fyne.App, w fyne.Window, actions *clientActionsUI) fyne.Canv
 
 	top := container.NewBorder(nil, nil, nil, refreshBtn, filter)
 	body := container.NewBorder(top, nil, nil, nil, container.NewScroll(list))
-	return container.NewPadded(widget.NewCard("Clients", "Search and select a client. The list auto-refreshes every 2 seconds.", body))
+	return container.NewPadded(widget.NewCard("Clients", "Search/select clients. Right-click connected clients for group, note, and sleep controls.", body))
+}
+
+type clientListItem struct {
+	widget.BaseWidget
+	label       *widget.Label
+	index       int
+	onSecondary func(index int, absPos fyne.Position)
+}
+
+func newClientListItem() *clientListItem {
+	it := &clientListItem{label: widget.NewLabel("")}
+	it.ExtendBaseWidget(it)
+	return it
+}
+
+func (i *clientListItem) set(index int, text string) {
+	i.index = index
+	i.label.SetText(text)
+}
+
+func (i *clientListItem) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(i.label)
+}
+
+func (i *clientListItem) TappedSecondary(ev *fyne.PointEvent) {
+	if i.onSecondary != nil {
+		i.onSecondary(i.index, ev.AbsolutePosition)
+	}
+}
+
+func showClientContextMenu(w fyne.Window, sum users.ClientSummary, meta data.ClientMeta, refresh func(), absPos fyne.Position) {
+	metaItem := fyne.NewMenuItem("Set Group / Note...", func() {
+		showClientMetaDialog(w, sum, meta, refresh)
+	})
+
+	items := []*fyne.MenuItem{metaItem}
+	if sum.Status == "connected" {
+		items = append(items,
+			fyne.NewMenuItemSeparator(),
+			fyne.NewMenuItem("Sleep Minutes...", func() { showClientSleepMinutesDialog(w, sum, refresh) }),
+			fyne.NewMenuItem("Sleep Until...", func() { showClientSleepUntilDialog(w, sum, refresh) }),
+			fyne.NewMenuItem("Clear Sleep", func() {
+				if err := applyClientSleep(sum, ""); err != nil {
+					dialog.ShowError(err, w)
+					return
+				}
+				if refresh != nil {
+					refresh()
+				}
+			}),
+		)
+	}
+
+	popup := widget.NewPopUpMenu(fyne.NewMenu("", items...), w.Canvas())
+	popup.ShowAtPosition(absPos)
+}
+
+func showClientMetaDialog(w fyne.Window, sum users.ClientSummary, meta data.ClientMeta, refresh func()) {
+	group := widget.NewEntry()
+	group.SetText(meta.Group)
+	note := widget.NewMultiLineEntry()
+	note.SetText(meta.Note)
+	note.SetMinRowsVisible(5)
+
+	form := widget.NewForm(
+		widget.NewFormItem("Group", group),
+		widget.NewFormItem("Note", note),
+	)
+	d := dialog.NewCustomConfirm("Client Meta", "Save", "Cancel", form, func(ok bool) {
+		if !ok {
+			return
+		}
+		if _, err := data.UpsertClientMeta(sum.Fingerprint, group.Text, note.Text); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		if refresh != nil {
+			refresh()
+		}
+	}, w)
+	d.Resize(fyne.NewSize(520, 360))
+	d.Show()
+}
+
+func showClientSleepMinutesDialog(w fyne.Window, sum users.ClientSummary, refresh func()) {
+	minutes := widget.NewEntry()
+	minutes.SetPlaceHolder("minutes")
+	d := dialog.NewCustomConfirm("Sleep Client", "Sleep", "Cancel", minutes, func(ok bool) {
+		if !ok {
+			return
+		}
+		mins, err := strconv.Atoi(strings.TrimSpace(minutes.Text))
+		if err != nil || mins <= 0 || mins > 365*24*60 {
+			dialog.ShowError(errors.New("minutes out of range"), w)
+			return
+		}
+		until := time.Now().Add(time.Duration(mins) * time.Minute).Format(time.RFC3339)
+		if err := applyClientSleep(sum, until); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		if refresh != nil {
+			refresh()
+		}
+	}, w)
+	d.Show()
+}
+
+func showClientSleepUntilDialog(w fyne.Window, sum users.ClientSummary, refresh func()) {
+	untilEntry := widget.NewEntry()
+	untilEntry.SetPlaceHolder("RFC3339, e.g. 2026-04-20T12:00:00Z")
+	if comm, _, err := data.GetClientCommSettings(sum.Fingerprint); err == nil {
+		untilEntry.SetText(comm.SleepUntil)
+	}
+	d := dialog.NewCustomConfirm("Sleep Until", "Apply", "Cancel", untilEntry, func(ok bool) {
+		if !ok {
+			return
+		}
+		until := strings.TrimSpace(untilEntry.Text)
+		if until == "" {
+			return
+		}
+		if _, err := time.Parse(time.RFC3339, until); err != nil {
+			dialog.ShowError(errors.New("until must be RFC3339"), w)
+			return
+		}
+		if err := applyClientSleep(sum, until); err != nil {
+			dialog.ShowError(err, w)
+			return
+		}
+		if refresh != nil {
+			refresh()
+		}
+	}, w)
+	d.Show()
+}
+
+func applyClientSleep(sum users.ClientSummary, until string) error {
+	comm, _, _ := data.GetClientCommSettings(sum.Fingerprint)
+	comm.SleepUntil = strings.TrimSpace(until)
+	if _, err := data.UpsertClientCommSettings(sum.Fingerprint, comm); err != nil {
+		return err
+	}
+	conn, ok := users.GetClientConnByFingerprint(sum.Fingerprint)
+	if !ok {
+		return errors.New("client not connected")
+	}
+	_, _, _ = conn.SendRequest("sleep-until@rssh", false, []byte(mustJSON(map[string]any{"until": comm.SleepUntil})))
+	if comm.SleepUntil != "" {
+		_ = conn.Close()
+	}
+	return nil
 }
 
 type shellSession struct {
@@ -1576,6 +1532,23 @@ func runAsync(w fyne.Window, title, message string, fn func() error, done func()
 			}
 		})
 	}()
+}
+
+func showTextPreviewDialog(w fyne.Window, title, text string) {
+	view := widget.NewMultiLineEntry()
+	view.Wrapping = fyne.TextWrapOff
+	view.Scroll = fyne.ScrollBoth
+	view.TextStyle = fyne.TextStyle{Monospace: true}
+	view.SetText(text)
+	view.SetMinRowsVisible(24)
+
+	copyBtn := widget.NewButtonWithIcon("Copy All", theme.ContentCopyIcon(), func() {
+		fyne.CurrentApp().Clipboard().SetContent(view.Text)
+	})
+	body := container.NewBorder(nil, container.NewHBox(copyBtn, layout.NewSpacer()), nil, nil, view)
+	d := dialog.NewCustom(title, "Close", body, w)
+	d.Resize(fyne.NewSize(860, 620))
+	d.Show()
 }
 
 type sftpEntry struct {
@@ -1706,6 +1679,51 @@ func sftpReadFileChunk(conn *ssh.ServerConn, filePath string, offset int64, maxB
 	return base64.StdEncoding.EncodeToString(out), "base64", truncated, meta, nil
 }
 
+func sftpReadFileChunkCached(fingerprint string, conn *ssh.ServerConn, entry sftpEntry, offset int64, maxBytes int64) (content string, encoding string, truncated bool, meta sftpFileMeta, err error) {
+	if offset < 0 {
+		offset = 0
+	}
+	if maxBytes <= 0 {
+		maxBytes = 256 * 1024
+	}
+	if maxBytes > 1024*1024 {
+		maxBytes = 1024 * 1024
+	}
+
+	meta = sftpFileMeta{
+		Size:    entry.Size,
+		Mode:    entry.Mode,
+		ModTime: entry.ModTime,
+	}
+	key := data.FileCacheKey(fingerprint, entry.Path, offset, maxBytes, meta.Size, meta.ModTime.UnixNano())
+	if cached, ok, cacheErr := data.GetFileCache(key); cacheErr == nil && ok {
+		return cached.Content, cached.Encoding, cached.Truncated, sftpFileMeta{
+			Size:    cached.Size,
+			Mode:    cached.Mode,
+			ModTime: time.Unix(0, cached.ModUnixNano),
+		}, nil
+	}
+
+	content, encoding, truncated, meta, err = sftpReadFileChunk(conn, entry.Path, offset, maxBytes)
+	if err != nil {
+		return "", "", false, sftpFileMeta{}, err
+	}
+	_ = data.UpsertFileCache(data.FileCache{
+		Key:         key,
+		Fingerprint: fingerprint,
+		Path:        entry.Path,
+		Offset:      offset,
+		MaxBytes:    maxBytes,
+		Size:        meta.Size,
+		ModUnixNano: meta.ModTime.UnixNano(),
+		Encoding:    encoding,
+		Content:     content,
+		Truncated:   truncated,
+		Mode:        meta.Mode,
+	})
+	return content, encoding, truncated, meta, nil
+}
+
 func parseRemoteForward(addr string) (internal.RemoteForwardRequest, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -1723,6 +1741,7 @@ type fileListItem struct {
 	label       *widget.Label
 	index       int
 	onSecondary func(index int, absPos fyne.Position)
+	onDouble    func(index int)
 }
 
 func newFileListItem() *fileListItem {
@@ -1746,6 +1765,12 @@ func (i *fileListItem) TappedSecondary(ev *fyne.PointEvent) {
 	}
 }
 
+func (i *fileListItem) DoubleTapped(_ *fyne.PointEvent) {
+	if i.onDouble != nil {
+		i.onDouble(i.index)
+	}
+}
+
 func showFileContextMenu(
 	w fyne.Window,
 	ctx func() (conn *ssh.ServerConn, curDir string, entry sftpEntry, ok bool, err error),
@@ -1765,6 +1790,7 @@ func showFileContextMenu(
 	if entry.IsDir {
 		targetDir = entry.Path
 	}
+	fingerprint := strings.TrimSpace(conn.Permissions.Extensions["pubkey-fp"])
 
 	refreshItem := fyne.NewMenuItem("Refresh", func() { refresh() })
 
@@ -1780,8 +1806,12 @@ func showFileContextMenu(
 			defer rc.Close()
 
 			localPath := rc.URI().Path()
+			remotePath := path.Join(targetDir, filepath.Base(localPath))
 			runAsync(w, "Upload", "Uploading…", func() error {
-				return sftpUploadLocalFile(conn, targetDir, localPath)
+				if err := sftpUploadLocalFile(conn, targetDir, localPath); err != nil {
+					return err
+				}
+				return data.DeleteFileCacheForPath(fingerprint, remotePath)
 			}, refresh)
 		}, w)
 	})
@@ -1803,40 +1833,35 @@ func showFileContextMenu(
 			dialog.ShowError(errors.New("download of directories is not supported yet"), w)
 			return
 		}
-		save := dialog.NewFileSave(func(wc fyne.URIWriteCloser, err error) {
+		dialog.ShowFolderOpen(func(dir fyne.ListableURI, err error) {
 			if err != nil {
 				dialog.ShowError(err, w)
 				return
 			}
-			if wc == nil {
+			if dir == nil {
 				return
 			}
-			defer wc.Close()
-
-			tmp, err := os.CreateTemp("", "rssh-download-*")
-			if err != nil {
+			target := filepath.Join(dir.Path(), entry.Name)
+			start := func() {
+				runAsync(w, "Download", "Downloading…", func() error {
+					return sftpDownloadFile(conn, entry.Path, target)
+				}, func() {
+					dialog.ShowInformation("Download", "Saved to "+target, w)
+				})
+			}
+			if _, err := os.Stat(target); err == nil {
+				dialog.ShowConfirm("Overwrite?", "File already exists:\n\n"+target+"\n\nOverwrite it?", func(ok bool) {
+					if ok {
+						start()
+					}
+				}, w)
+				return
+			} else if !os.IsNotExist(err) {
 				dialog.ShowError(err, w)
 				return
 			}
-			tmpPath := tmp.Name()
-			_ = tmp.Close()
-			defer os.Remove(tmpPath)
-
-			runAsync(w, "Download", "Downloading…", func() error {
-				if err := sftpDownloadFile(conn, entry.Path, tmpPath); err != nil {
-					return err
-				}
-				f, err := os.Open(tmpPath)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-				_, err = io.Copy(wc, f)
-				return err
-			}, nil)
+			start()
 		}, w)
-		save.SetFileName(entry.Name)
-		save.Show()
 	})
 
 	editItem := fyne.NewMenuItem("Edit…", func() {
@@ -1862,7 +1887,10 @@ func showFileContextMenu(
 				return
 			}
 			runAsync(w, "Save File", "Saving…", func() error {
-				return sftpWriteTextFile(conn, entry.Path, editor.Text)
+				if err := sftpWriteTextFile(conn, entry.Path, editor.Text); err != nil {
+					return err
+				}
+				return data.DeleteFileCacheForPath(fingerprint, entry.Path)
 			}, refresh)
 		}, w)
 		d.Resize(fyne.NewSize(820, 560))
@@ -1876,7 +1904,15 @@ func showFileContextMenu(
 				return
 			}
 			newPath := path.Join(path.Dir(entry.Path), name)
-			runAsync(w, "Rename", "Renaming…", func() error { return sftpRename(conn, entry.Path, newPath) }, refresh)
+			runAsync(w, "Rename", "Renaming…", func() error {
+				if err := sftpRename(conn, entry.Path, newPath); err != nil {
+					return err
+				}
+				if err := data.DeleteFileCacheForPath(fingerprint, entry.Path); err != nil {
+					return err
+				}
+				return data.DeleteFileCacheForPath(fingerprint, newPath)
+			}, refresh)
 		}, w)
 		d.SetText(entry.Name)
 		d.Show()
@@ -1888,7 +1924,12 @@ func showFileContextMenu(
 				if !ok {
 					return
 				}
-				runAsync(w, "Delete", "Deleting…", func() error { return sftpRemove(conn, entry.Path, true) }, refresh)
+				runAsync(w, "Delete", "Deleting…", func() error {
+					if err := sftpRemove(conn, entry.Path, true); err != nil {
+						return err
+					}
+					return data.DeleteFileCacheForPath(fingerprint, entry.Path)
+				}, refresh)
 			}, w)
 			return
 		}
@@ -1896,7 +1937,12 @@ func showFileContextMenu(
 			if !ok {
 				return
 			}
-			runAsync(w, "Delete", "Deleting…", func() error { return sftpRemove(conn, entry.Path, false) }, refresh)
+			runAsync(w, "Delete", "Deleting…", func() error {
+				if err := sftpRemove(conn, entry.Path, false); err != nil {
+					return err
+				}
+				return data.DeleteFileCacheForPath(fingerprint, entry.Path)
+			}, refresh)
 		}, w)
 	})
 

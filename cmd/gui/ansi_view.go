@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -14,8 +13,7 @@ type ansiTextView struct {
 	maxLen      int
 	maxSegments int
 
-	rt     *widget.RichText
-	scroll *container.Scroll
+	entry *widget.Entry
 
 	mu        sync.Mutex
 	parser    *ansiParser
@@ -27,31 +25,29 @@ type ansiTextView struct {
 }
 
 func newANSITextView() *ansiTextView {
-	rt := widget.NewRichText()
-	rt.Wrapping = fyne.TextWrapWord
-	rt.Scroll = fyne.ScrollBoth
-
-	scroll := container.NewScroll(rt)
-	scroll.Direction = container.ScrollBoth
+	entry := widget.NewMultiLineEntry()
+	entry.Wrapping = fyne.TextWrapOff
+	entry.Scroll = fyne.ScrollBoth
+	entry.TextStyle = fyne.TextStyle{Monospace: true}
+	entry.SetPlaceHolder("")
 
 	const maxLen = 300_000
 	return &ansiTextView{
 		maxLen:      maxLen,
 		maxSegments: 4000,
-		rt:          rt,
-		scroll:      scroll,
+		entry:       entry,
 		parser:      newANSIParser(maxLen, 4000),
 		flushEach:   50 * time.Millisecond,
 	}
 }
 
 func (v *ansiTextView) Object() fyne.CanvasObject {
-	return v.scroll
+	return v.entry
 }
 
 func (v *ansiTextView) SetWrapping(wrapping fyne.TextWrap) {
-	v.rt.Wrapping = wrapping
-	v.rt.Refresh()
+	v.entry.Wrapping = wrapping
+	v.entry.Refresh()
 }
 
 func (v *ansiTextView) SetText(s string) {
@@ -62,6 +58,16 @@ func (v *ansiTextView) SetText(s string) {
 	v.parser = newANSIParser(v.maxLen, v.maxSegments)
 	v.parser.Append(sanitizeTerminalText(s))
 	v.renderLocked()
+}
+
+func (v *ansiTextView) Text() string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.entry.Text
+}
+
+func (v *ansiTextView) Clear() {
+	v.SetText("")
 }
 
 func (v *ansiTextView) Append(s string) {
@@ -102,30 +108,19 @@ func (v *ansiTextView) flush() {
 }
 
 func (v *ansiTextView) renderLocked() {
-	segments := v.parser.Segments()
-	if len(segments) == 0 {
-		segments = []widget.RichTextSegment{&widget.TextSegment{
-			Text: "",
-			Style: widget.RichTextStyle{
-				Inline:    true,
-				ColorName: ansiFgDefault,
-				TextStyle: fyne.TextStyle{Monospace: true},
-			},
-		}}
-	}
-	v.rt.Segments = segments
-	v.rt.Refresh()
-	v.scroll.Refresh()
-	v.scroll.ScrollToBottom()
-	v.scroll.Refresh()
+	v.entry.SetText(stripANSIForCopy(v.parser.Text()))
+	v.entry.CursorRow = len(strings.Split(v.entry.Text, "\n")) - 1
+	v.entry.CursorColumn = 0
+	v.entry.Refresh()
 
 	// Some layouts update content size after refresh; schedule a second scroll-to-bottom
 	// to keep the view pinned when output is large.
 	if v.scrollT == nil {
 		v.scrollT = time.AfterFunc(10*time.Millisecond, func() {
 			fyne.Do(func() {
-				v.scroll.ScrollToBottom()
-				v.scroll.Refresh()
+				v.entry.CursorRow = len(strings.Split(v.entry.Text, "\n")) - 1
+				v.entry.CursorColumn = 0
+				v.entry.Refresh()
 				v.mu.Lock()
 				v.scrollT = nil
 				v.mu.Unlock()
@@ -172,6 +167,73 @@ func sanitizeTerminalText(s string) string {
 			continue
 		default:
 			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func stripANSIForCopy(s string) string {
+	s = sanitizeTerminalText(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != 0x1b {
+			b.WriteByte(s[i])
+			continue
+		}
+		if i+1 >= len(s) {
+			break
+		}
+		switch s[i+1] {
+		case '[':
+			j := i + 2
+			for j < len(s) {
+				c := s[j]
+				if c >= 0x40 && c <= 0x7e {
+					break
+				}
+				j++
+			}
+			if j >= len(s) {
+				return b.String()
+			}
+			i = j
+		case ']':
+			j := i + 2
+			for j < len(s) {
+				if s[j] == 0x07 {
+					break
+				}
+				if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
+					j++
+					break
+				}
+				j++
+			}
+			if j >= len(s) {
+				return b.String()
+			}
+			i = j
+		case 'P', '^', '_':
+			j := i + 2
+			for j < len(s) {
+				if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
+					j++
+					break
+				}
+				j++
+			}
+			if j >= len(s) {
+				return b.String()
+			}
+			i = j
+		case '(', ')', '*', '+':
+			if i+2 >= len(s) {
+				return b.String()
+			}
+			i += 2
+		default:
+			i++
 		}
 	}
 	return b.String()
